@@ -4,9 +4,11 @@ using System.ComponentModel;
 using System.Data;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Xml.Linq;
@@ -15,9 +17,16 @@ namespace XMLcolored
 {
     public partial class Form1 : Form
     {
-        #region xml
         private string text = "<?xml version=\"1.0\" encoding=\"utf-16\"?>\r\n<AppSettings xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">\r\n";
         private string path;
+        #region xml Element Color
+        private static readonly Color colorEquality = Color.FromArgb(255, 200, 200, 200);
+        private static readonly Color colorQuotationMarks = Color.FromArgb(255, 215, 150, 120);
+        private static readonly Color colorText = Color.FromArgb(255, 215, 150, 120);
+        private static readonly Color colorAttribute = Color.FromArgb(255, 156, 220, 255);
+        private static readonly Color colorSymbol = Color.FromArgb(255, 128, 128, 100);
+        private static readonly Color colorElement = Color.FromArgb(255, 86, 156, 215);
+        private static readonly Color colorComent = Color.FromArgb(255, 106, 153, 85);
         #endregion
         public Form1()
         {
@@ -35,7 +44,7 @@ namespace XMLcolored
                 this.xmlRichTextBox.SuspendLayout();
                 try
                 {
-                    xmlRichTextBox.Text = XElement.Load(openFileDialog.FileName).ToString();
+                    xmlRichTextBox.Text = File.Open(openFileDialog.FileName, FileMode.Open).ToString();
                     this.xmlRichTextBox.Text = XElement.Parse(this.xmlRichTextBox.Text).ToString();
                     path = openFileDialog.FileName;
                     FormatXML(this.xmlRichTextBox);
@@ -50,16 +59,29 @@ namespace XMLcolored
             rtb.SuspendLayout();
             try
             {
-                Color colorEquality = Color.FromArgb(255, 200, 200, 200);
-                Color colorQuotationMarks = Color.FromArgb(255, 215, 150, 120);
-                Color colorText = Color.FromArgb(255, 215, 150, 120);
-                Color colorAttribute = Color.FromArgb(255, 156, 220, 255);
-                Color colorSymbol = Color.FromArgb(255, 128, 128, 100);
-                Color colorElement = Color.FromArgb(255, 86, 156, 215);
+                string pattern = "(~(<[^\\s!]*\\s)([^<>]*)([/?]?>)~iU)";
+                RegexOptions option = RegexOptions.IgnoreCase;
+                Regex newReg = new Regex(pattern, option);
+                MatchCollection matches = newReg.Matches(rtb.Text);
+                foreach (Match match in matches)
+                {
+                    rtb.SelectionStart = match.Index;
+                    rtb.SelectionLength = match.Length;
+                    rtb.SelectionColor = colorText;
+                }
+            }
+            catch (Exception ex) { }
+            rtb.ResumeLayout(false);
+        }
 
+        public static void FormatXML1(RichTextBox rtb)
+        {
+            rtb.SuspendLayout();
+            try
+            {
                 int nextIndex = 0;
                 int endIndex = 0;
-                while (rtb.Find("=", nextIndex, RichTextBoxFinds.MatchCase) >= 0 && nextIndex < rtb.TextLength)
+                while (rtb.Find(" = ", nextIndex, RichTextBoxFinds.MatchCase) >= 0 && nextIndex < rtb.TextLength)
                 {
                     rtb.SelectionColor = colorEquality;
                     nextIndex = rtb.SelectionStart + rtb.SelectionLength;
