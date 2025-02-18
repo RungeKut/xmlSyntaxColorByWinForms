@@ -1,182 +1,192 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Drawing.Drawing2D;
+﻿using ScintillaNET;
+using System;
 using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Xml;
 using System.Xml.Linq;
 
 namespace XMLcolored
 {
     public partial class Form1 : Form
     {
-        private string text = "<?xml version=\"1.0\" encoding=\"utf-16\"?>\r\n<AppSettings xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">\r\n";
-        private string path;
-        #region xml Element Color
-        private static readonly Color colorEquality = Color.FromArgb(255, 200, 200, 200);
-        private static readonly Color colorQuotationMarks = Color.FromArgb(255, 215, 150, 120);
-        private static readonly Color colorText = Color.FromArgb(255, 215, 150, 120);
-        private static readonly Color colorAttribute = Color.FromArgb(255, 156, 220, 255);
-        private static readonly Color colorSymbol = Color.FromArgb(255, 128, 128, 100);
-        private static readonly Color colorElement = Color.FromArgb(255, 86, 156, 215);
-        private static readonly Color colorComent = Color.FromArgb(255, 106, 153, 85);
-        #endregion
+        private Scintilla scintilla;
+        private string filePath;
+
         public Form1()
         {
             InitializeComponent();
-            xmlRichTextBox.Text = text;
-            FormatXML(this.xmlRichTextBox);
+            InitializeScintilla();
+        }
+
+        private void InitializeScintilla()
+        {
+            // Создаем и настраиваем Scintilla
+            scintilla = new Scintilla();
+
+            // Сброс всех стилей
+            scintilla.StyleResetDefault();
+
+            scintilla.LexerLanguage = "xml";
+            scintilla.LexerName = "xml";
+
+            // Настройка стилей для XML Lexer.SCLEX_XML
+            scintilla.Styles[Style.Xml.Default].ForeColor = System.Drawing.Color.Black; // Обычный текст
+            scintilla.Styles[Style.Xml.Tag].ForeColor = System.Drawing.Color.Blue; // Теги
+            scintilla.Styles[Style.Xml.TagEnd].ForeColor = System.Drawing.Color.Blue; // Закрывающие теги
+            scintilla.Styles[Style.Xml.Attribute].ForeColor = System.Drawing.Color.IndianRed; // Атрибуты
+            scintilla.Styles[Style.Xml.Number].ForeColor = System.Drawing.Color.DarkGreen; // Числа
+            scintilla.Styles[Style.Xml.DoubleString].ForeColor = System.Drawing.Color.DarkOrange; // Двойные кавычки
+            scintilla.Styles[Style.Xml.SingleString].ForeColor = System.Drawing.Color.DarkOrange; // Одинарные кавычки
+            scintilla.Styles[Style.Xml.Comment].ForeColor = System.Drawing.Color.Green; // Комментарии
+            scintilla.Styles[Style.Xml.Entity].ForeColor = System.Drawing.Color.Purple; // Сущности (например, &amp;)
+            scintilla.Styles[Style.Xml.CData].ForeColor = System.Drawing.Color.Gray; // CDATA-секции
+
+            scintilla.Margins[0].Width = 32; // Ширина поля для номеров строк
+            scintilla.ScrollWidth = 1000;  // Ширина прокрутки
+            scintilla.LexerLanguage = scintilla.GetLexerIDFromLexer(Lexer.SCLEX_XML);
+
+            // Настройка шрифта (опционально)
+            scintilla.Styles[Style.Default].Font = "Consolas";
+            scintilla.Styles[Style.Default].Size = 12;
+
+            // Подключаем обработчик изменения текста
+            scintilla.TextChanged += Scintilla_TextChanged;
+
+            // Добавляем Scintilla на форму
+            this.Controls.Add(scintilla);
+            scintilla.Dock = DockStyle.Fill;
+
+            LoadXmlContent();
+        }
+
+        private bool isValidationInProgress = false;
+
+        private void Scintilla_TextChanged(object sender, EventArgs e)
+        {
+            UpdateLineNumbersWidth();
+            // Если валидация уже выполняется, выходим
+            if (isValidationInProgress)
+                return;
+
+            isValidationInProgress = true;
+
+            try
+            {
+                // Запускаем асинхронную валидацию
+                ValidateXml(scintilla.Text);
+            }
+            finally
+            {
+                isValidationInProgress = false;
+            }
+        }
+
+        private void LoadXmlContent()
+        {
+            // Пример XML-содержимого
+            string xmlContent = @"<?xml version=""1.0"" encoding=""UTF-8""?>
+<root>
+    <element attribute=""value"">Text</element>
+    <nested>
+        <child>Content</child>
+    </nested>
+    <!-- Это комментарий -->
+</root>";
+
+            // Загружаем XML в Scintilla
+            scintilla.Text = xmlContent;
+        }
+
+        private void ValidateXml(string xmlContent)
+        {
+            try
+            {
+                scintilla.MarkerDeleteAll(-1);
+                // Пытаемся загрузить XML
+                var xmlDoc = new XmlDocument();
+                xmlDoc.LoadXml(xmlContent);
+            }
+            catch (XmlException ex)
+            {
+                // Если XML невалиден, выделяем ошибку
+                HighlightError(ex.LinePosition, ex.LineNumber);
+            }
+        }
+
+        private void HighlightError(int linePosition, int lineNumber)
+        {
+            // Преобразуем номер строки и позицию в индекс символа
+            int position = scintilla.Lines[lineNumber - 1].Position + linePosition - 1;
+
+            // Устанавливаем маркер для выделения ошибки
+            scintilla.Markers[0].Symbol = MarkerSymbol.Circle; // Тип маркера
+            scintilla.Markers[0].SetBackColor(System.Drawing.Color.MediumVioletRed); // Цвет маркера
+            //scintilla.Markers[0].SetForeColor(System.Drawing.Color.White); // Цвет текста маркера
+
+            // Добавляем маркер на строку с ошибкой
+            scintilla.Lines[lineNumber - 1].MarkerAdd(0);
+
+            // Прокручиваем Scintilla до строки с ошибкой
+            scintilla.GotoPosition(position);
+            scintilla.ScrollCaret();
         }
 
         private void Open_Click(object sender, EventArgs e)
         {
             OpenFileDialog openFileDialog = new OpenFileDialog();
-            openFileDialog.InitialDirectory = this.text;
+            //openFileDialog.InitialDirectory = this.text;
             if (openFileDialog.ShowDialog() == DialogResult.OK)
             {
-                this.xmlRichTextBox.SuspendLayout();
+                filePath = openFileDialog.FileName;
                 try
                 {
-                    xmlRichTextBox.Text = File.Open(openFileDialog.FileName, FileMode.Open).ToString();
-                    this.xmlRichTextBox.Text = XElement.Parse(this.xmlRichTextBox.Text).ToString();
-                    path = openFileDialog.FileName;
-                    FormatXML(this.xmlRichTextBox);
+                    // чтение из файла
+                    using (FileStream fstream = File.OpenRead(filePath))
+                    {
+                        // выделяем массив для считывания данных из файла
+                        byte[] buffer = new byte[fstream.Length];
+                        // считываем данные
+                        fstream.Read(buffer, 0, buffer.Length);
+                        // декодируем байты в строку
+                        string textFromFile = Encoding.Default.GetString(buffer);
+                        scintilla.Text = textFromFile;
+                    }
                 }
-                catch (Exception) { }
-                this.xmlRichTextBox.ResumeLayout();
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message, "Ошибка чтения файла!", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
             }
         }
 
-        public static void FormatXML(RichTextBox rtb)
+        private void UpdateLineNumbersWidth()
         {
-            rtb.SuspendLayout();
-            try
+            int digit = 1;
+            int lineCount = scintilla.Lines.Count;
+            while (lineCount >= 10)
             {
-                string pattern = "(~(<[^\\s!]*\\s)([^<>]*)([/?]?>)~iU)";
-                RegexOptions option = RegexOptions.IgnoreCase;
-                Regex newReg = new Regex(pattern, option);
-                MatchCollection matches = newReg.Matches(rtb.Text);
-                foreach (Match match in matches)
-                {
-                    rtb.SelectionStart = match.Index;
-                    rtb.SelectionLength = match.Length;
-                    rtb.SelectionColor = colorText;
-                }
+                lineCount /= 10;
+                digit++;
             }
-            catch (Exception ex) { }
-            rtb.ResumeLayout(false);
-        }
-
-        public static void FormatXML1(RichTextBox rtb)
-        {
-            rtb.SuspendLayout();
-            try
-            {
-                int nextIndex = 0;
-                int endIndex = 0;
-                while (rtb.Find(" = ", nextIndex, RichTextBoxFinds.MatchCase) >= 0 && nextIndex < rtb.TextLength)
-                {
-                    rtb.SelectionColor = colorEquality;
-                    nextIndex = rtb.SelectionStart + rtb.SelectionLength;
-                    rtb.Find("\"", nextIndex, RichTextBoxFinds.MatchCase);
-                    rtb.SelectionColor = colorQuotationMarks;
-                    int textStartIndex = rtb.SelectionStart + rtb.SelectionLength;
-                    rtb.Find("\"", textStartIndex, RichTextBoxFinds.MatchCase);
-                    rtb.SelectionColor = colorQuotationMarks;
-                    endIndex = rtb.SelectionStart;
-                    rtb.SelectionStart = textStartIndex;
-                    rtb.SelectionLength = endIndex - textStartIndex;
-                    rtb.SelectionColor = colorText;
-                    rtb.Find(" ", 0, nextIndex, RichTextBoxFinds.Reverse);
-                    rtb.SelectionStart = rtb.SelectionStart + rtb.SelectionLength;
-                    rtb.SelectionLength = nextIndex - 1 - rtb.SelectionStart;
-                    rtb.SelectionColor = colorAttribute;
-                }
-                nextIndex = 0;
-                endIndex = 0;
-                while (rtb.Find("<", nextIndex, RichTextBoxFinds.None) >= 0 && nextIndex < rtb.TextLength)
-                {
-                    rtb.SelectionColor = colorSymbol;
-                    nextIndex = rtb.SelectionStart + rtb.SelectionLength;
-                    endIndex = nextIndex;
-                    while (rtb.Text[endIndex] != '?' && rtb.Text[endIndex] != '/' && rtb.Text[endIndex] != ' ' && rtb.Text[endIndex] != '>')
-                    {
-                        endIndex++;
-                    }
-                    switch (rtb.Text[endIndex])
-                    {
-                        case '?':
-                            rtb.SelectionLength++;
-                            rtb.SelectionColor = colorSymbol;
-                            nextIndex++;
-                            rtb.SelectionStart = nextIndex;
-                            char[] find2 = { '?', ' ' };
-                            rtb.Find(find2, nextIndex, rtb.TextLength);
-                            endIndex = nextIndex;
-                            while (rtb.Text[endIndex] != '?' && rtb.Text[endIndex] != ' ')
-                            {
-                                endIndex++;
-                            }
-                            rtb.SelectionLength = endIndex - nextIndex;
-                            rtb.SelectionColor = colorElement;
-                            rtb.Find("?>", endIndex, RichTextBoxFinds.MatchCase);
-                            rtb.SelectionColor = colorSymbol;
-                            nextIndex = rtb.SelectionStart + rtb.SelectionLength;
-                            break;
-                        case '/':
-                            rtb.SelectionLength++;
-                            rtb.SelectionColor = colorSymbol;
-                            nextIndex++;
-                            int index = rtb.Find(">", nextIndex, RichTextBoxFinds.MatchCase);
-                            rtb.SelectionColor = colorSymbol;
-                            rtb.SelectionStart = nextIndex;
-                            rtb.SelectionLength = index - nextIndex;
-                            rtb.SelectionColor = colorElement;
-                            nextIndex = index;
-                            break;
-                        case ' ':
-                            rtb.SelectionLength = endIndex - nextIndex;
-                            rtb.SelectionStart = nextIndex;
-                            rtb.SelectionColor = colorElement;
-                            rtb.Find(">", nextIndex, RichTextBoxFinds.MatchCase);
-                            rtb.SelectionColor = colorSymbol;
-                            nextIndex = rtb.SelectionStart + rtb.SelectionLength;
-                            break;
-                        default:
-                            endIndex = nextIndex;
-                            while (rtb.Text[endIndex] != '>' && rtb.Text[endIndex] != ' ')
-                            {
-                                endIndex++;
-                            }
-                            rtb.SelectionStart = nextIndex;
-                            rtb.SelectionLength = endIndex - nextIndex;
-                            rtb.SelectionColor = colorElement;
-                            nextIndex = rtb.SelectionStart + rtb.SelectionLength;
-                            break;
-                    }
-                }
-            }
-            catch (Exception ex) { }
-            rtb.ResumeLayout(false);
+            scintilla.Margins[0].Width = digit * scintilla.Styles[Style.Default].Size;
         }
 
         private void Save_Click(object sender, EventArgs e)
         {
             try
             {
-                XDocument xDocument = new XDocument(new XElement(XElement.Parse(this.xmlRichTextBox.Text)));
-                xDocument.Save(path);
+                using (FileStream fstream = new FileStream(filePath, FileMode.OpenOrCreate))
+                {
+                    // преобразуем строку в байты
+                    byte[] input = Encoding.Default.GetBytes(scintilla.Text);
+                    // запись массива байтов в файл
+                    fstream.Write(input, 0, input.Length);
+                }
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message, "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(ex.Message, "Ошибка сохранения файла!", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -211,17 +221,15 @@ namespace XMLcolored
                 if (filePaths.Length > 0)
                 {
                     e.Effect = DragDropEffects.All;
-                    //LoadDropFile(filePaths);
-                    this.xmlRichTextBox.SuspendLayout();
                     try
                     {
-                        xmlRichTextBox.Text = XElement.Load(filePaths[0]).ToString();
-                        this.xmlRichTextBox.Text = XElement.Parse(this.xmlRichTextBox.Text).ToString();
-                        path = filePaths[0];
-                        FormatXML(this.xmlRichTextBox);
+                        scintilla.Text = XElement.Load(filePaths[0]).ToString();
+                        filePath = filePaths[0];
                     }
-                    catch (Exception) { }
-                    this.xmlRichTextBox.ResumeLayout();
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show(ex.Message, "Ошибка чтения Drag&Drop файла!", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
                 }
                 else
                 {
@@ -234,7 +242,6 @@ namespace XMLcolored
                 MessageBox.Show("Файлы:\n" + findFileMess + "имеют неподдерживаемый формат!", "Эти файлы не поддерживаются!", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 findFileMess = null;
             }
-
         }
 
         private void Form1_DragEnter(object sender, DragEventArgs e)
@@ -248,7 +255,6 @@ namespace XMLcolored
             {
                 e.Effect = DragDropEffects.None;
             }
-
         }
 
         private void Form1_Load(object sender, EventArgs e)
@@ -278,17 +284,15 @@ namespace XMLcolored
                         findFileMess += System.IO.Path.GetFileName(args[i + 1]) + "\n";
                     }
                 }
-                //LoadDropFile(filePaths);
-                this.xmlRichTextBox.SuspendLayout();
                 try
                 {
-                    xmlRichTextBox.Text = XElement.Load(filePaths[0]).ToString();
-                    this.xmlRichTextBox.Text = XElement.Parse(this.xmlRichTextBox.Text).ToString();
-                    path = filePaths[0];
-                    FormatXML(this.xmlRichTextBox);
+                    scintilla.Text = XElement.Load(filePaths[0]).ToString();
+                    filePath = filePaths[0];
                 }
-                catch (Exception) { }
-                this.xmlRichTextBox.ResumeLayout();
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message, "Ошибка чтения файла!", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
             }
             if (findFileMess != null)
             {
