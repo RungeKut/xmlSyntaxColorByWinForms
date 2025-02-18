@@ -5,6 +5,8 @@ using System.Text;
 using System.Windows.Forms;
 using System.Xml;
 using System.Xml.Linq;
+using System.Xml.Serialization;
+using System.Drawing;
 
 namespace XMLcolored
 {
@@ -27,24 +29,21 @@ namespace XMLcolored
             // Сброс всех стилей
             scintilla.StyleResetDefault();
 
-            scintilla.LexerLanguage = "xml";
             scintilla.LexerName = "xml";
 
             // Настройка стилей для XML Lexer.SCLEX_XML
-            scintilla.Styles[Style.Xml.Default].ForeColor = System.Drawing.Color.Black; // Обычный текст
-            scintilla.Styles[Style.Xml.Tag].ForeColor = System.Drawing.Color.Blue; // Теги
-            scintilla.Styles[Style.Xml.TagEnd].ForeColor = System.Drawing.Color.Blue; // Закрывающие теги
-            scintilla.Styles[Style.Xml.Attribute].ForeColor = System.Drawing.Color.IndianRed; // Атрибуты
-            scintilla.Styles[Style.Xml.Number].ForeColor = System.Drawing.Color.DarkGreen; // Числа
-            scintilla.Styles[Style.Xml.DoubleString].ForeColor = System.Drawing.Color.DarkOrange; // Двойные кавычки
-            scintilla.Styles[Style.Xml.SingleString].ForeColor = System.Drawing.Color.DarkOrange; // Одинарные кавычки
-            scintilla.Styles[Style.Xml.Comment].ForeColor = System.Drawing.Color.Green; // Комментарии
-            scintilla.Styles[Style.Xml.Entity].ForeColor = System.Drawing.Color.Purple; // Сущности (например, &amp;)
-            scintilla.Styles[Style.Xml.CData].ForeColor = System.Drawing.Color.Gray; // CDATA-секции
+            scintilla.Styles[Style.Xml.Default].ForeColor = Color.Black; // Обычный текст
+            scintilla.Styles[Style.Xml.Tag].ForeColor = Color.Blue; // Теги
+            scintilla.Styles[Style.Xml.TagEnd].ForeColor = Color.Blue; // Закрывающие теги
+            scintilla.Styles[Style.Xml.Attribute].ForeColor = Color.IndianRed; // Атрибуты
+            scintilla.Styles[Style.Xml.Number].ForeColor = Color.DarkGreen; // Числа
+            scintilla.Styles[Style.Xml.DoubleString].ForeColor = Color.DarkOrange; // Двойные кавычки
+            scintilla.Styles[Style.Xml.SingleString].ForeColor = Color.DarkOrange; // Одинарные кавычки
+            scintilla.Styles[Style.Xml.Comment].ForeColor = Color.Green; // Комментарии
+            scintilla.Styles[Style.Xml.Entity].ForeColor = Color.Purple; // Сущности (например, &amp;)
+            scintilla.Styles[Style.Xml.CData].ForeColor = Color.Gray; // CDATA-секции
 
-            scintilla.Margins[0].Width = 32; // Ширина поля для номеров строк
             scintilla.ScrollWidth = 1000;  // Ширина прокрутки
-            scintilla.LexerLanguage = scintilla.GetLexerIDFromLexer(Lexer.SCLEX_XML);
 
             // Настройка шрифта (опционально)
             scintilla.Styles[Style.Default].Font = "Consolas";
@@ -57,7 +56,81 @@ namespace XMLcolored
             this.Controls.Add(scintilla);
             scintilla.Dock = DockStyle.Fill;
 
+            //SaveStylesToFile("styles.xml");
+            //LoadStylesFromFile("styles.xml");
+
             LoadXmlContent();
+        }
+
+        private void SaveStylesToFile(string filePath)
+        {
+            // Создаем объект с настройками стилей
+            var styleSettings = new ScintillaStyleSettings
+            {
+                DefaultForeColor = scintilla.Styles[Style.Xml.Default].ForeColor.ToArgb().ToString("X"),
+                TagForeColor = scintilla.Styles[Style.Xml.Tag].ForeColor.ToArgb().ToString("X"),
+                TagEndForeColor = scintilla.Styles[Style.Xml.TagEnd].ForeColor.ToArgb().ToString("X"),
+                AttributeForeColor = scintilla.Styles[Style.Xml.Attribute].ForeColor.ToArgb().ToString("X"),
+                NumberForeColor = scintilla.Styles[Style.Xml.Number].ForeColor.ToArgb().ToString("X"),
+                DoubleStringForeColor = scintilla.Styles[Style.Xml.DoubleString].ForeColor.ToArgb().ToString("X"),
+                SingleStringForeColor = scintilla.Styles[Style.Xml.SingleString].ForeColor.ToArgb().ToString("X"),
+                CommentForeColor = scintilla.Styles[Style.Xml.Comment].ForeColor.ToArgb().ToString("X"),
+                EntityForeColor = scintilla.Styles[Style.Xml.Entity].ForeColor.ToArgb().ToString("X"),
+                CDataForeColor = scintilla.Styles[Style.Xml.CData].ForeColor.ToArgb().ToString("X"),
+                FontName = scintilla.Styles[Style.Default].Font,
+                FontSize = scintilla.Styles[Style.Default].Size
+            };
+
+            // Сериализуем объект в XML
+            try
+            {
+                using (FileStream fstream = new FileStream(filePath, FileMode.OpenOrCreate))
+                {
+                    // передаем в конструктор тип класса StyleCollection
+                    XmlSerializer xmlSerializer = new XmlSerializer(typeof(ScintillaStyleSettings));
+                    // Сериализуем
+                    xmlSerializer.Serialize(fstream, styleSettings);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Ошибка сохранения стилей!", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void LoadStylesFromFile(string filePath)
+        {
+            // Сериализуем объект в XML
+            try
+            {
+                ScintillaStyleSettings styleSettings;
+
+                using (FileStream fstream = File.OpenRead(filePath))
+                {
+                    // передаем в конструктор тип класса StyleCollection
+                    XmlSerializer xmlSerializer = new XmlSerializer(typeof(ScintillaStyleSettings));
+                    // Десериализуем
+                    styleSettings = (ScintillaStyleSettings)xmlSerializer.Deserialize(fstream);
+                }
+
+                // Применяем настройки стилей к Scintilla
+                scintilla.Styles[Style.Xml.Default].ForeColor = Color.FromArgb(int.Parse(styleSettings.DefaultForeColor, System.Globalization.NumberStyles.HexNumber));
+                scintilla.Styles[Style.Xml.Tag].ForeColor = Color.FromArgb(int.Parse(styleSettings.TagForeColor, System.Globalization.NumberStyles.HexNumber));
+                scintilla.Styles[Style.Xml.TagEnd].ForeColor = Color.FromArgb(int.Parse(styleSettings.TagEndForeColor, System.Globalization.NumberStyles.HexNumber));
+                scintilla.Styles[Style.Xml.Attribute].ForeColor = Color.FromArgb(int.Parse(styleSettings.AttributeForeColor, System.Globalization.NumberStyles.HexNumber));
+                scintilla.Styles[Style.Xml.Number].ForeColor = Color.FromArgb(int.Parse(styleSettings.NumberForeColor, System.Globalization.NumberStyles.HexNumber));
+                scintilla.Styles[Style.Xml.DoubleString].ForeColor = Color.FromArgb(int.Parse(styleSettings.DoubleStringForeColor, System.Globalization.NumberStyles.HexNumber));
+                scintilla.Styles[Style.Xml.SingleString].ForeColor = Color.FromArgb(int.Parse(styleSettings.SingleStringForeColor, System.Globalization.NumberStyles.HexNumber));
+                scintilla.Styles[Style.Xml.Comment].ForeColor = Color.FromArgb(int.Parse(styleSettings.CommentForeColor, System.Globalization.NumberStyles.HexNumber));
+                scintilla.Styles[Style.Xml.Entity].ForeColor = Color.FromArgb(int.Parse(styleSettings.EntityForeColor, System.Globalization.NumberStyles.HexNumber));
+                scintilla.Styles[Style.Xml.CData].ForeColor = Color.FromArgb(int.Parse(styleSettings.CDataForeColor, System.Globalization.NumberStyles.HexNumber));
+                scintilla.Styles[Style.Default].Font = styleSettings.FontName;
+                scintilla.Styles[Style.Default].Size = styleSettings.FontSize;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Ошибка чтения стилей!", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private bool isValidationInProgress = false;
@@ -169,6 +242,7 @@ namespace XMLcolored
                 lineCount /= 10;
                 digit++;
             }
+            // Ширина поля для номеров строк
             scintilla.Margins[0].Width = digit * scintilla.Styles[Style.Default].Size;
         }
 
